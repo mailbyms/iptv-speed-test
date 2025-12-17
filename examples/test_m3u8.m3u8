@@ -1,0 +1,15 @@
+#EXTM3U
+#EXT-X-VERSION:3
+#EXT-X-TARGETDURATION:4
+#EXT-X-MEDIA-SEQUENCE:0
+#EXTINF:4.0,
+segment1.ts
+#EXTINF:4.0,
+segment2.ts
+#EXTINF:4.0,
+segment3.ts
+#EXTINF:4.0,
+segment4.ts
+#EXTINF:4.0,
+segment5.ts
+#EXT-X-ENDLIST

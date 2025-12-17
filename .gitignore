@@ -1,0 +1,77 @@
+# Rust
+/target/
+**/*.rs.bk
+Cargo.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+*.tmp
+*.temp
+
+# Logs
+*.log
+
+# Test files
+test_urls*.txt
+!examples/test_urls.txt
+
+# Build artifacts
+/target/release/deps/
+/target/release/build/
+/target/release/incremental/
+/target/debug/deps/
+/target/debug/build/
+/target/debug/incremental/
+
+# Backup files
+*.bak
+*.backup
+*.old
+
+# Local configuration
+.env
+.env.local
+.env.*.local
+
+# Temporary directories
+tmp/
+temp/
+
+# Profiling data
+*.prof
+*.pprof
+
+# Coverage reports
+tarpaulin-report.html
+cobertura.xml
+
+# Documentation build
+/doc/
+/docs/book/
+
+# Rust Analyzer
+/.rustc_info.json
+/.rustfmt.toml.local
+
+# Clippy
+/clippy.toml.local
+
+# Performance profiling
+perf.data*
+perf.dump
+callgrind.out.*
+
+# Memory debugging
+*.heap
+
+# Development scripts (keep examples)
+scripts/
+!examples/
