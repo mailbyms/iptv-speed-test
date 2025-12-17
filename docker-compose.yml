@@ -1,0 +1,13 @@
+services:
+  rust:
+    image: rust
+    tty: true
+    volumes:
+      - .:/data
+    working_dir: /data
+    environment:
+      TZ: Asia/Shanghai
+      RUSTUP_DIST_SERVER: "https://rsproxy.cn"
+      RUSTUP_UPDATE_ROOT: "https://rsproxy.cn/rustup"
+      CARGO_UNSTABLE_SPARSE_REGISTRY: true
+

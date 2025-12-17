@@ -75,3 +75,10 @@ callgrind.out.*
 # Development scripts (keep examples)
 scripts/
 !examples/
+
+# Script running
+checked/
+downloads/
+filtered/
+
+
