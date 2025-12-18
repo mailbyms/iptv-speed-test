@@ -29,8 +29,12 @@ pub struct SpeedTester {
 
 impl SpeedTester {
     pub fn new(timeout: Duration, concurrent: usize, verbose: bool) -> Self {
+        // 连接超时设置为2秒
+        let connect_timeout = Duration::from_secs(2);
+
         let client = Client::builder()
-            .timeout(timeout)
+            .timeout(connect_timeout)  // 连接超时2秒
+            .connect_timeout(connect_timeout)  // 连接建立超时2秒
             .danger_accept_invalid_certs(true)
             .build()
             .expect("Failed to create HTTP client");
@@ -143,8 +147,10 @@ impl SpeedTester {
     async fn download_and_measure(&self, url: &str) -> Result<(f64, f64, f64)> {
         let start_time = Instant::now();
 
+        // 使用2秒连接超时，但读取流使用3秒限制
         let response = self.client
             .get(url)
+            .timeout(Duration::from_secs(3))  // 整体请求超时3秒（包含连接+读取）
             .send()
             .await?;
 
@@ -152,7 +158,7 @@ impl SpeedTester {
             return Err(anyhow!("HTTP错误: {}", response.status()));
         }
 
-        // 计算连接延迟
+        // 计算连接延迟（到收到响应头的时间）
         let delay_ms = start_time.elapsed().as_millis() as f64;
 
         let content_length = response
@@ -164,7 +170,7 @@ impl SpeedTester {
         let mut downloaded_bytes = 0u64;
         let mut stream = response.bytes_stream();
 
-        // 设置3秒时间限制，用于流式下载
+        // 设置3秒时间限制，专门用于流式下载（从连接成功后开始计算）
         let read_start = Instant::now();
         let stream_timeout = Duration::from_secs(3);
 
@@ -172,10 +178,10 @@ impl SpeedTester {
             let chunk = chunk?;
             downloaded_bytes += chunk.len() as u64;
 
-            // 检查是否达到3秒时间限制
+            // 检查是否达到3秒时间限制（从连接成功后开始计算）
             if read_start.elapsed() > stream_timeout {
                 if self.verbose {
-                    println!("达到3秒时间限制，停止下载");
+                    println!("连接成功后达到3秒读取时间限制，停止下载");
                 }
                 break;
             }
@@ -315,8 +321,10 @@ impl SpeedTester {
     }
 
     async fn download_segment_speed(&self, url: &str) -> Result<u64> {
+        // 使用2秒连接超时，但读取流使用3秒限制
         let response = self.client
             .get(url)
+            .timeout(Duration::from_secs(3))  // 整体请求超时3秒（包含连接+读取）
             .send()
             .await?;
 
@@ -327,7 +335,7 @@ impl SpeedTester {
         let mut downloaded_bytes = 0u64;
         let mut stream = response.bytes_stream();
 
-        // 设置3秒时间限制，用于HLS片段下载
+        // 设置3秒时间限制，专门用于HLS片段流式下载（从连接成功后开始计算）
         let read_start = Instant::now();
         let stream_timeout = Duration::from_secs(3);
 
@@ -335,10 +343,10 @@ impl SpeedTester {
             let chunk = chunk?;
             downloaded_bytes += chunk.len() as u64;
 
-            // 检查是否达到3秒时间限制
+            // 检查是否达到3秒时间限制（从连接成功后开始计算）
             if read_start.elapsed() > stream_timeout {
                 if self.verbose {
-                    println!("HLS片段下载达到3秒时间限制，停止下载: {}", url);
+                    println!("HLS片段连接成功后达到3秒读取时间限制，停止下载: {}", url);
                 }
                 break;
             }
