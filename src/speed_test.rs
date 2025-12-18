@@ -11,7 +11,7 @@ pub struct SpeedTestResult {
     pub url: String,
     pub success: bool,
     pub delay_ms: f64,
-    pub speed_mbps: f64,
+    pub speed_kbps: f64,
     pub size_mb: f64,
     pub duration_secs: f64,
     pub protocol_type: String,
@@ -101,12 +101,12 @@ impl SpeedTester {
         let duration_secs = duration.as_secs_f64();
 
         match result {
-            Ok(Ok((delay_ms, speed_mbps, size_mb))) => {
+            Ok(Ok((delay_ms, speed_kbps, size_mb))) => {
                 Ok(SpeedTestResult {
                     url: url.to_string(),
                     success: true,
                     delay_ms,
-                    speed_mbps,
+                    speed_kbps,
                     size_mb,
                     duration_secs,
                     protocol_type: "HTTP直连".to_string(),
@@ -118,7 +118,7 @@ impl SpeedTester {
                     url: url.to_string(),
                     success: false,
                     delay_ms: -1.0,
-                    speed_mbps: 0.0,
+                    speed_kbps: 0.0,
                     size_mb: 0.0,
                     duration_secs,
                     protocol_type: "HTTP直连".to_string(),
@@ -130,7 +130,7 @@ impl SpeedTester {
                     url: url.to_string(),
                     success: false,
                     delay_ms: -1.0,
-                    speed_mbps: 0.0,
+                    speed_kbps: 0.0,
                     size_mb: 0.0,
                     duration_secs,
                     protocol_type: "HTTP直连".to_string(),
@@ -183,21 +183,21 @@ impl SpeedTester {
 
         let total_time = start_time.elapsed().as_secs_f64();
         let size_mb = downloaded_bytes as f64 / (1024.0 * 1024.0);
-        let speed_mbps = if total_time > 0.0 {
-            (downloaded_bytes as f64 / total_time) / (1024.0 * 1024.0)
+        let speed_kbps = if total_time > 0.0 {
+            (downloaded_bytes as f64 * 8.0) / total_time / 1024.0
         } else {
             0.0
         };
 
         if self.verbose {
-            println!("下载完成: {:.2} MB, 耗时: {:.2} 秒, 速度: {:.2} MB/s",
-                     size_mb, total_time, speed_mbps);
+            println!("下载完成: {:.2} MB, 耗时: {:.2} 秒, 速度: {:.0} kbps",
+                     size_mb, total_time, speed_kbps);
             if let Some(length) = content_length {
                 println!("Content-Length: {} bytes, 实际下载: {} bytes", length, downloaded_bytes);
             }
         }
 
-        Ok((delay_ms, speed_mbps, size_mb))
+        Ok((delay_ms, speed_kbps, size_mb))
     }
 
     async fn test_m3u8_url(&self, url: &str) -> Result<SpeedTestResult> {
@@ -213,12 +213,12 @@ impl SpeedTester {
         let duration_secs = duration.as_secs_f64();
 
         match result {
-            Ok(Ok((delay_ms, speed_mbps, size_mb, details))) => {
+            Ok(Ok((delay_ms, speed_kbps, size_mb, details))) => {
                 Ok(SpeedTestResult {
                     url: url.to_string(),
                     success: true,
                     delay_ms,
-                    speed_mbps,
+                    speed_kbps,
                     size_mb,
                     duration_secs,
                     protocol_type: "HLS/M3U8".to_string(),
@@ -230,7 +230,7 @@ impl SpeedTester {
                     url: url.to_string(),
                     success: false,
                     delay_ms: -1.0,
-                    speed_mbps: 0.0,
+                    speed_kbps: 0.0,
                     size_mb: 0.0,
                     duration_secs,
                     protocol_type: "HLS/M3U8".to_string(),
@@ -242,7 +242,7 @@ impl SpeedTester {
                     url: url.to_string(),
                     success: false,
                     delay_ms: -1.0,
-                    speed_mbps: 0.0,
+                    speed_kbps: 0.0,
                     size_mb: 0.0,
                     duration_secs,
                     protocol_type: "HLS/M3U8".to_string(),
@@ -298,20 +298,20 @@ impl SpeedTester {
         let delay_ms = start_time.elapsed().as_millis() as f64;
 
         let size_mb = total_size as f64 / (1024.0 * 1024.0);
-        let speed_mbps = if total_time > 0.0 {
-            (total_size as f64 / total_time) / (1024.0 * 1024.0)
+        let speed_kbps = if total_time > 0.0 {
+            (total_size as f64 * 8.0) / total_time / 1024.0
         } else {
             0.0
         };
 
         let details = format!(
-            "HLS流测试 - 总片段: {}, 成功: {}, 平均速度: {:.2} MB/s",
+            "HLS流测试 - 总片段: {}, 成功: {}, 平均速度: {:.0} kbps",
             test_segments.len(),
             successful_downloads,
-            speed_mbps
+            speed_kbps
         );
 
-        Ok((delay_ms, speed_mbps, size_mb, details))
+        Ok((delay_ms, speed_kbps, size_mb, details))
     }
 
     async fn download_segment_speed(&self, url: &str) -> Result<u64> {

@@ -37,25 +37,40 @@ async fn main() -> Result<()> {
         cli.verbose,
     );
 
-    println!("开始测试 URL: {}", cli.url);
+    if cli.verbose {
+        println!("开始测试 URL: {}", cli.url);
+    }
 
     match tester.test_url(&cli.url).await {
         Ok(result) => {
-            println!("\n=== 测试结果 ===");
-            println!("URL: {}", result.url);
-            println!("状态: {}", if result.success { "成功" } else { "失败" });
-            println!("延迟: {:.2} ms", result.delay_ms);
-            println!("下载速度: {:.2} MB/s", result.speed_mbps);
-            println!("下载大小: {:.2} MB", result.size_mb);
-            println!("测试时长: {:.2} 秒", result.duration_secs);
-            println!("协议类型: {}", result.protocol_type);
+            if cli.verbose {
+                println!("\n=== 测试结果 ===");
+                println!("URL: {}", result.url);
+                println!("状态: {}", if result.success { "成功" } else { "失败" });
+                println!("延迟: {:.2} ms", result.delay_ms);
+                println!("下载速度: {:.0} kbps", result.speed_kbps);
+                println!("下载大小: {:.2} MB", result.size_mb);
+                println!("测试时长: {:.2} 秒", result.duration_secs);
+                println!("协议类型: {}", result.protocol_type);
 
-            if let Some(details) = result.details {
-                println!("详细信息: {}", details);
+                if let Some(details) = result.details {
+                    println!("详细信息: {}", details);
+                }
+            } else {
+                // 非verbose模式，只输出速率（kbps）
+                if result.success {
+                    println!("{:.0} kbps", result.speed_kbps);
+                } else {
+                    println!("0 kbps");
+                }
             }
         }
         Err(e) => {
-            eprintln!("测试失败: {}", e);
+            if cli.verbose {
+                eprintln!("测试失败: {}", e);
+            } else {
+                println!("0");
+            }
         }
     }
 
