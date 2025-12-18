@@ -49,12 +49,8 @@ impl SpeedTester {
             println!("检测URL类型: {}", url);
         }
 
-        // 检查是否为 Udpxy URL
-        if self.is_likely_udpxy_url(url) {
-            self.test_udpxy_url(url).await
-        }
         // 检查URL类型
-        else if self.is_m3u8_url(url).await? {
+        if self.is_m3u8_url(url).await? {
             self.test_m3u8_url(url).await
         } else {
             self.test_direct_url(url).await
@@ -62,10 +58,16 @@ impl SpeedTester {
     }
 
     async fn is_m3u8_url(&self, url: &str) -> Result<bool> {
-        let response = self.client
-            .head(url)
-            .send()
-            .await?;
+        let response = match self.client.head(url).send().await {
+            Ok(resp) => resp,
+            Err(_) => {
+                // HEAD请求失败，返回false，继续后面处理
+                if self.verbose {
+                    println!("HEAD请求失败，假设不是M3U8格式");
+                }
+                return Ok(false);
+            }
+        };
 
         let content_type = response
             .headers()
@@ -162,9 +164,21 @@ impl SpeedTester {
         let mut downloaded_bytes = 0u64;
         let mut stream = response.bytes_stream();
 
+        // 设置3秒时间限制，用于流式下载
+        let read_start = Instant::now();
+        let stream_timeout = Duration::from_secs(3);
+
         while let Some(chunk) = stream.next().await {
             let chunk = chunk?;
             downloaded_bytes += chunk.len() as u64;
+
+            // 检查是否达到3秒时间限制
+            if read_start.elapsed() > stream_timeout {
+                if self.verbose {
+                    println!("达到3秒时间限制，停止下载");
+                }
+                break;
+            }
         }
 
         let total_time = start_time.elapsed().as_secs_f64();
@@ -313,121 +327,23 @@ impl SpeedTester {
         let mut downloaded_bytes = 0u64;
         let mut stream = response.bytes_stream();
 
+        // 设置3秒时间限制，用于HLS片段下载
+        let read_start = Instant::now();
+        let stream_timeout = Duration::from_secs(3);
+
         while let Some(chunk) = stream.next().await {
             let chunk = chunk?;
             downloaded_bytes += chunk.len() as u64;
-        }
 
-        Ok(downloaded_bytes)
-    }
-
-    fn is_likely_udpxy_url(&self, url: &str) -> bool {
-        // Udpxy URL 的特征：
-        // 1. 路径包含 /rtp/
-        // 2. 后面跟着多播地址 (239.x.x.x) 和端口
-        let url_lower = url.to_lowercase();
-        url_lower.contains("/rtp/") &&
-        url_lower.contains("239.") &&
-        (url_lower.contains(":") || url_lower.matches("/").count() > 3)
-    }
-
-    async fn test_udpxy_url(&self, url: &str) -> Result<SpeedTestResult> {
-        let start_time = Instant::now();
-
-        if self.verbose {
-            println!("检测到Udpxy代理URL，使用GET请求测试...");
-        }
-
-        // 直接使用GET请求测试Udpxy代理
-        let result = timeout(self.timeout, self.test_http_stream(url)).await;
-
-        let duration = start_time.elapsed();
-        let duration_secs = duration.as_secs_f64();
-
-        match result {
-            Ok(Ok((delay_ms, speed_mbps, size_mb))) => {
-                Ok(SpeedTestResult {
-                    url: url.to_string(),
-                    success: true,
-                    delay_ms,
-                    speed_mbps,
-                    size_mb,
-                    duration_secs,
-                    protocol_type: "Udpxy代理".to_string(),
-                    details: Some("Udpxy UDP多播流代理测试完成".to_string()),
-                })
-            }
-            Ok(Err(e)) => {
-                Ok(SpeedTestResult {
-                    url: url.to_string(),
-                    success: false,
-                    delay_ms: -1.0,
-                    speed_mbps: 0.0,
-                    size_mb: 0.0,
-                    duration_secs,
-                    protocol_type: "Udpxy代理".to_string(),
-                    details: Some(format!("Udpxy测试失败: {}", e)),
-                })
-            }
-            Err(_) => {
-                Ok(SpeedTestResult {
-                    url: url.to_string(),
-                    success: false,
-                    delay_ms: -1.0,
-                    speed_mbps: 0.0,
-                    size_mb: 0.0,
-                    duration_secs,
-                    protocol_type: "Udpxy代理".to_string(),
-                    details: Some("Udpxy测试超时".to_string()),
-                })
-            }
-        }
-    }
-
-    async fn test_http_stream(&self, url: &str) -> Result<(f64, f64, f64)> {
-        let start_time = Instant::now();
-        let delay = -1.0;
-        let mut total_size = 0u64;
-
-        // Udpxy需要GET请求才能开始流转发
-        let response = self.client
-            .get(url)
-            .send()
-            .await?;
-
-        if !response.status().is_success() {
-            return Err(anyhow!("HTTP错误: {}", response.status()));
-        }
-
-        let mut stream = response.bytes_stream();
-
-        // 读取数据（限制读取时间）
-        let stream_timeout = Duration::from_secs(3);
-        let read_start = Instant::now();
-
-        while let Some(chunk) = stream.next().await {
-            let chunk = chunk?;
-            total_size += chunk.len() as u64;
-
-            // 限制读取时间，避免无限读取流
+            // 检查是否达到3秒时间限制
             if read_start.elapsed() > stream_timeout {
+                if self.verbose {
+                    println!("HLS片段下载达到3秒时间限制，停止下载: {}", url);
+                }
                 break;
             }
         }
 
-        let total_time = start_time.elapsed().as_secs_f64();
-        let size_mb = total_size as f64 / (1024.0 * 1024.0);
-        let speed_mbps = if total_time > 0.0 {
-            (total_size as f64 / total_time) / (1024.0 * 1024.0)
-        } else {
-            0.0
-        };
-
-        if self.verbose {
-            println!("Udpxy流读取完成: {:.2} MB, 耗时: {:.2} 秒, 速度: {:.2} MB/s",
-                     size_mb, total_time, speed_mbps);
-        }
-
-        Ok((delay, speed_mbps, size_mb))
+        Ok(downloaded_bytes)
     }
 }
