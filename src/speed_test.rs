@@ -6,6 +6,15 @@ use tokio::time::timeout;
 
 use crate::m3u8_parser::M3u8Parser;
 
+// HEAD检查结果枚举
+#[derive(Debug)]
+enum HeadCheckResult {
+    M3U8,           // HEAD成功，识别为M3U8
+    DirectUrl,      // HEAD成功，识别为直接URL
+    FailedM3U8Suffix, // HEAD失败，但URL以.m3u8结尾
+    FailedNonM3U8,  // HEAD失败，URL不以.m3u8结尾
+}
+
 #[derive(Debug, Clone)]
 pub struct SpeedTestResult {
     pub url: String,
@@ -29,12 +38,12 @@ pub struct SpeedTester {
 
 impl SpeedTester {
     pub fn new(timeout: Duration, concurrent: usize, verbose: bool) -> Self {
-        // 连接超时设置为2秒
-        let connect_timeout = Duration::from_secs(2);
+        // 连接超时设置为1秒
+        let connect_timeout = Duration::from_secs(1);
 
         let client = Client::builder()
-            .timeout(connect_timeout)  // 连接超时2秒
-            .connect_timeout(connect_timeout)  // 连接建立超时2秒
+            .timeout(connect_timeout)  // 连接超时1秒
+            .connect_timeout(connect_timeout)  // 连接建立超时1秒
             .danger_accept_invalid_certs(true)
             .build()
             .expect("Failed to create HTTP client");
@@ -53,26 +62,84 @@ impl SpeedTester {
             println!("检测URL类型: {}", url);
         }
 
-        // 检查URL类型
-        if self.is_m3u8_url(url).await? {
-            self.test_m3u8_url(url).await
-        } else {
-            self.test_direct_url(url).await
+        // 先发送HEAD请求检查URL
+        match self.head_check_url(url).await? {
+            HeadCheckResult::M3U8 => {
+                if self.verbose {
+                    println!("HEAD请求成功，识别为M3U8格式");
+                }
+                self.test_m3u8_url(url).await
+            }
+            HeadCheckResult::DirectUrl => {
+                if self.verbose {
+                    println!("HEAD请求成功，识别为直接URL");
+                }
+                self.test_direct_url(url).await
+            }
+            HeadCheckResult::FailedM3U8Suffix => {
+                if self.verbose {
+                    println!("HEAD请求失败，但URL以.m3u8结尾，跳过测试");
+                }
+                Ok(SpeedTestResult {
+                    url: url.to_string(),
+                    success: false,
+                    delay_ms: -1.0,
+                    speed_kbps: 0.0,
+                    size_mb: 0.0,
+                    duration_secs: 0.0,
+                    protocol_type: "HEAD失败".to_string(),
+                    details: Some("HEAD请求失败且URL以.m3u8结尾，跳过测试".to_string()),
+                })
+            }
+            HeadCheckResult::FailedNonM3U8 => {
+                if self.verbose {
+                    println!("HEAD请求失败，URL不以.m3u8结尾，继续GET测试");
+                }
+                self.test_direct_url(url).await
+            }
         }
     }
 
-    async fn is_m3u8_url(&self, url: &str) -> Result<bool> {
+    async fn head_check_url(&self, url: &str) -> Result<HeadCheckResult> {
+        // 先发送HEAD请求
         let response = match self.client.head(url).send().await {
-            Ok(resp) => resp,
-            Err(_) => {
-                // HEAD请求失败，返回false，继续后面处理
+            Ok(resp) => {
                 if self.verbose {
-                    println!("HEAD请求失败，假设不是M3U8格式");
+                    println!("HEAD请求成功");
                 }
-                return Ok(false);
+                resp
+            }
+            Err(e) => {
+                if self.verbose {
+                    println!("HEAD请求失败: {}", e);
+                }
+
+                // HEAD请求失败，检查URL后缀
+                let basename = self.get_url_basename(url);
+                if basename.to_lowercase().ends_with(".m3u8") {
+                    return Ok(HeadCheckResult::FailedM3U8Suffix);
+                } else {
+                    return Ok(HeadCheckResult::FailedNonM3U8);
+                }
             }
         };
 
+        // 检查响应状态
+        if !response.status().is_success() {
+            if self.verbose {
+                println!("HEAD请求状态码: {}", response.status());
+            }
+
+            // HEAD请求失败，检查URL后缀
+            let basename = self.get_url_basename(url);
+            if basename.to_lowercase().ends_with(".m3u8") {
+                return Ok(HeadCheckResult::FailedM3U8Suffix);
+            } else {
+                return Ok(HeadCheckResult::FailedNonM3U8);
+            }
+        }
+
+        // 检查Content-Type
         let content_type = response
             .headers()
             .get(reqwest::header::CONTENT_TYPE)
@@ -80,18 +147,39 @@ impl SpeedTester {
             .unwrap_or("")
             .to_lowercase();
 
-        let is_m3u8 = content_type.contains("mpegurl") ||
-                     content_type.contains("m3u8") ||
-                     url.to_lowercase().ends_with(".m3u8");
+        let basename = self.get_url_basename(url);
+        let is_m3u8_by_content_type = content_type.contains("mpegurl") || content_type.contains("m3u8");
+        let is_m3u8_by_suffix = basename.to_lowercase().ends_with(".m3u8");
 
         if self.verbose {
             println!("Content-Type: {}", content_type);
-            println!("是否为M3U8: {}", is_m3u8);
+            println!("URL basename: {}", basename);
+            println!("M3U8 by Content-Type: {}", is_m3u8_by_content_type);
+            println!("M3U8 by suffix: {}", is_m3u8_by_suffix);
         }
 
-        Ok(is_m3u8)
+        if is_m3u8_by_content_type || is_m3u8_by_suffix {
+            Ok(HeadCheckResult::M3U8)
+        } else {
+            Ok(HeadCheckResult::DirectUrl)
+        }
     }
 
+    // 获取URL的basename（去掉域名和路径，只保留文件名）
+    fn get_url_basename(&self, url: &str) -> String {
+        // 移除查询参数和锚点
+        let clean_url = url.split('?').next().unwrap_or(url);
+        let clean_url = clean_url.split('#').next().unwrap_or(clean_url);
+
+        // 提取basename
+        if let Some(last_slash) = clean_url.rfind('/') {
+            clean_url[last_slash + 1..].to_string()
+        } else {
+            clean_url.to_string()
+        }
+    }
+
+    
     async fn test_direct_url(&self, url: &str) -> Result<SpeedTestResult> {
         let start_time = Instant::now();
 
@@ -147,7 +235,7 @@ impl SpeedTester {
     async fn download_and_measure(&self, url: &str) -> Result<(f64, f64, f64)> {
         let start_time = Instant::now();
 
-        // 使用2秒连接超时，但读取流使用3秒限制
+        // 使用1秒连接超时，但读取流使用3秒限制
         let response = self.client
             .get(url)
             .timeout(Duration::from_secs(3))  // 整体请求超时3秒（包含连接+读取）
@@ -321,7 +409,7 @@ impl SpeedTester {
     }
 
     async fn download_segment_speed(&self, url: &str) -> Result<u64> {
-        // 使用2秒连接超时，但读取流使用3秒限制
+        // 使用1秒连接超时，但读取流使用3秒限制
         let response = self.client
             .get(url)
             .timeout(Duration::from_secs(3))  // 整体请求超时3秒（包含连接+读取）
