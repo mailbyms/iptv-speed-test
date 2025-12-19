@@ -96,6 +96,8 @@ if [ -f "$temp_file" ]; then
     # 检查排序文件是否存在
     if [ -f "$output_file" ]; then
         echo "正在转换: $output_file -> $m3u_output_file"
+        # 创建临时文件
+        cat $output_file | sort > "$temp_file"
 
         # 创建M3U文件头部
         echo "#EXTM3U" > "$m3u_output_file"
@@ -123,7 +125,9 @@ if [ -f "$temp_file" ]; then
                 echo "$line" >> "$m3u_output_file"
                 converted_lines=$((converted_lines + 1))
             fi
-        done < "$output_file"
+        done < "$temp_file"
+        # 清理临时文件
+        rm -f "$temp_file"
 
         # 统计转换结果
         m3u_total_lines=$(wc -l < "$m3u_output_file" 2>/dev/null || echo "0")

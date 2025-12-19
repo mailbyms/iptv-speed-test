@@ -7,7 +7,7 @@ OUTPUT_DIR="filtered"
 
 # 关键词白名单配置 (用空格分隔多个关键词)
 # 只有包含这些关键词的行才会被保留
-WHITELIST_KEYWORDS="广东 广州 深圳 香港卫视 无线新闻 明珠台 翡翠台 凤凰卫视 卡通 少儿 /rtp/"
+WHITELIST_KEYWORDS="广东 广州 CCTV5 深圳 香港卫视 无线新闻 明珠台 翡翠台 凤凰卫视 卡通 少儿 /rtp/"
 rm -fr "$DOWNLOAD_DIR" "$OUTPUT_DIR" 
 
 echo "开始处理订阅源下载..."
@@ -156,7 +156,7 @@ while IFS= read -r line; do
 done < "$SUBSCRIBE_FILE"
 
 echo "处理完成！"
-echo "开始过滤下载的文件，过滤关键词：swf, drm，audio 只保留 http[s] 协议的..."
+echo "开始过滤下载的文件，过滤关键词：swf, drm，audio，伴音。只保留 http[s] 协议的..."
 echo "白名单关键词: $WHITELIST_KEYWORDS"
 
 # 处理下载目录中的所有txt文件
@@ -175,8 +175,8 @@ for file in "$DOWNLOAD_DIR"/*.txt; do
         # 复制到临时文件进行处理
         cp "$file" "$temp_file"
 
-        # 步骤1: 去掉包含 swf 或 drm 或 audio 的行（不区分大小写）
-        sed -i '/swf\|drm\|audio/Id' "$temp_file"
+        # 步骤1: 去掉包含 swf 或 drm 或 audio 或 伴音 的行（不区分大小写）
+        sed -i '/swf\|drm\|audio\|伴音/Id' "$temp_file"
 
         # 步骤2: 保留包含 http 或 https 的行
         sed -i '/https\?:\/\//!d' "$temp_file"
