@@ -13,46 +13,37 @@ convert_m3u_to_text() {
     local m3u_file="$1"
     local txt_file="$2"
     local txt_path="$DOWNLOAD_DIR/$txt_file"
-    local counter=1
     local channel_name=""
     local start_time=$(date +%s)
     local processed=0
     local total_lines=0
 
-    # 计算文件总行数用于进度显示
-    echo "  📊 分析文件大小..."
-    total_lines=$(wc -l < "$m3u_file" 2>/dev/null || echo "0")
+    # 计算文件有效链接（以http开头）行数用于进度显示
+    total_lines=$(grep -c "^http" "$m3u_file" 2>/dev/null || echo "0")
 
     if [ "$total_lines" -eq 0 ]; then
         echo "  ⚠ 文件为空或无法读取"
         return 1
     fi
 
-    echo "  🔄 开始转换 M3U 文件 (共 $total_lines 行)..."
+    echo "  🔄 开始转换 M3U 文件 (有效链接共 $total_lines)..."
+    
+    # 清理m3u文件：去掉空行、只保留#EXTINF或http开头的行
+    sed -i '/^$/d' "$DOWNLOAD_DIR/$filename"  # 去掉空行
+    sed -i '/^#EXTINF\|^http/!d' "$DOWNLOAD_DIR/$filename"  # 只保留#EXTINF或http开头的行
+    echo "  文件清理完成，开始转换格式..."
 
     # 创建输出文件
     {
         # 读取m3u文件并显示进度
+        local prev_line=""
         while IFS= read -r line; do
-            processed=$((processed + 1))
 
             # 每处理10行显示一次进度
             local progress_interval=10
 
             if [ $((processed % progress_interval)) -eq 0 ] || [ "$processed" -eq "$total_lines" ]; then
                 local progress=$((processed * 100 / total_lines))
-                local current_time=$(date +%s)
-                local elapsed=$((current_time - start_time))
-                local lines_per_sec=0
-                local remaining=0
-
-                if [ "$elapsed" -gt 0 ]; then
-                    lines_per_sec=$((processed / elapsed))
-                fi
-
-                if [ "$lines_per_sec" -gt 0 ]; then
-                    remaining=$(((total_lines - processed) / lines_per_sec))
-                fi
 
                 # 简化进度条显示，使用更兼容的方式
                 local bar_width=20
@@ -70,39 +61,41 @@ convert_m3u_to_text() {
                     echo "" >&2
                 fi
             fi
+          
+            # 当前行是http开头的URL行时处理
+            if [[ "$line" =~ ^http ]]; then
+                local channel_name=""
 
-            # 跳过以#开头的行（除非是EXTINF）
-            if [[ "$line" =~ ^# ]] && [[ ! "$line" =~ ^#EXTINF ]]; then
-                continue
-            fi
+                # 检查上一行是否为EXTINF
+                if [[ "$prev_line" =~ ^#EXTINF ]]; then
+                    # 从EXTINF行提取频道名称 - 多种格式支持
+                    # 格式1: #EXTINF:-1,频道名称
+                    # 格式2: #EXTINF:-1 tvg-id="xxx",频道名称
+                    # 格式3: #EXTINF:-1 group-title="xxx",频道名称
+                    if [[ "$prev_line" =~ ,(.+)$ ]]; then
+                        channel_name="${BASH_REMATCH[1]}"
+                        # 去掉前后空格和特殊字符
+                        channel_name=$(echo "$channel_name" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+                    fi
 
-            # 处理EXTINF行（频道信息）
-            if [[ "$line" =~ ^#EXTINF ]]; then
-                # 提取频道名称 - 多种格式支持
-                # 格式1: #EXTINF:-1,频道名称
-                # 格式2: #EXTINF:-1 tvg-id="xxx",频道名称
-                # 格式3: #EXTINF:-1 group-title="xxx",频道名称
-                if [[ "$line" =~ ,(.+)$ ]]; then
-                    channel_name="${BASH_REMATCH[1]}"
-                    # 去掉前后空格和特殊字符
-                    channel_name=$(echo "$channel_name" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-                fi
-                # 读取下一行作为URL
-                read -r url_line
-                if [[ "$url_line" =~ ^http ]]; then
                     # 如果没有提取到频道名称，使用默认值
                     if [ -z "$channel_name" ]; then
-                        channel_name="频道$counter"
+                        channel_name="频道$processed"
                     fi
-                    echo "$channel_name,$url_line"
-                    counter=$((counter + 1))
-                    channel_name=""
+                else
+                    # 上一行不是EXTINF，生成默认频道名称
+                    channel_name="频道$processed"
                 fi
-            # 处理直接的URL行（没有EXTINF的情况）
-            elif [[ "$line" =~ ^http ]]; then
-                echo "频道$counter,$line"
-                counter=$((counter + 1))
+
+                # 输出频道名称和URL
+                echo "$channel_name,$line"
+
+                # 更新已处理行数
+                processed=$((processed + 1))
             fi
+
+            # 记录当前行为上一行（为下一次循环准备）
+            prev_line="$line"
         done < "$m3u_file"
     } > "$txt_path"
 
@@ -111,7 +104,7 @@ convert_m3u_to_text() {
 
     local end_time=$(date +%s)
     local total_time=$((end_time - start_time))
-    local total_channels=$((counter - 1))
+    local total_channels=$processed
 
     if [ "$total_time" -gt 0 ]; then
         local avg_speed=$((total_channels / total_time))
