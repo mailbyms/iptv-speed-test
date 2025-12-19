@@ -176,6 +176,9 @@ for file in "$DOWNLOAD_DIR"/*.txt; do
         # 步骤2: 保留包含 http 或 https 的行
         sed -i '/https\?:\/\//!d' "$temp_file"
 
+        # 步骤3: 去掉包含非ASCII字符的URL行
+        LC_ALL=C sed -i '/https\?:\/\/.*[\x80-\xFF]/d' "$temp_file"
+
         # 将过滤后的内容写入输出目录
         if [ -f "$temp_file" ]; then
             # 统计过滤后的行数
