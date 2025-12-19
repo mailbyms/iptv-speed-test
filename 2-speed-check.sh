@@ -41,12 +41,19 @@ for file_path in $(ls -1 "$FILTERED_DIR"); do
         echo "---"
         echo "正在处理文件: $filename"
 
+        # 计算总URL数量
+        total_urls=$(wc -l < "$file_path")
+        launched_tasks=0
+
         # 逐行读取文件
         while IFS= read -r line || [ -n "$line" ]; do
             # 当正在运行的任务达到最大数量时，等待任一任务完成
             while (( $(jobs -p | wc -l) >= MAX_JOBS )); do
                 sleep 0.1
             done
+
+            launched_tasks=$((launched_tasks + 1))
+            printf "  测试进度: %d/%d\r" "$launched_tasks" "$total_urls"
 
             # 在后台处理当前行
             (
