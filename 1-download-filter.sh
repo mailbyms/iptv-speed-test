@@ -7,7 +7,7 @@ OUTPUT_DIR="filtered"
 
 # 关键词白名单配置 (用空格分隔多个关键词)
 # 只有包含这些关键词的行才会被保留
-WHITELIST_KEYWORDS="广东 广州 深圳 香港 凤凰 卡通 少儿 /rtp/"
+WHITELIST_KEYWORDS="广东 广州 深圳 香港卫视 无线新闻 明珠台 翡翠台 凤凰卫视 卡通 少儿 /rtp/"
 rm -fr "$DOWNLOAD_DIR" "$OUTPUT_DIR" 
 
 echo "开始处理订阅源下载..."
