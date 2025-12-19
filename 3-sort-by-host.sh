@@ -86,6 +86,55 @@ if [ -f "$temp_file" ]; then
     # 删除合并文件
     rm -f "$merged_file"
     echo "  已清理临时合并文件"
+
+    # 步骤3：转换为M3U格式
+    echo ""
+    echo "开始转换为 M3U 格式..."
+
+    m3u_output_file="${output_file%.txt}.m3u"
+
+    # 检查排序文件是否存在
+    if [ -f "$output_file" ]; then
+        echo "正在转换: $output_file -> $m3u_output_file"
+
+        # 创建M3U文件头部
+        echo "#EXTM3U" > "$m3u_output_file"
+
+        # 转换每一行
+        converted_lines=0
+        while IFS= read -r line; do
+            # 跳过空行
+            if [ -z "$line" ]; then
+                continue
+            fi
+
+            # 提取频道名称和URL（格式：频道名,URL）
+            if [[ "$line" =~ ^([^,]+),(.+)$ ]]; then
+                channel_name="${BASH_REMATCH[1]}"
+                url="${BASH_REMATCH[2]}"
+
+                # 添加M3U格式的频道信息
+                echo "#EXTINF:-1,$channel_name" >> "$m3u_output_file"
+                echo "$url" >> "$m3u_output_file"
+                converted_lines=$((converted_lines + 1))
+            else
+                # 如果格式不正确，尝试作为纯URL处理
+                echo "#EXTINF:-1,$line" >> "$m3u_output_file"
+                echo "$line" >> "$m3u_output_file"
+                converted_lines=$((converted_lines + 1))
+            fi
+        done < "$output_file"
+
+        # 统计转换结果
+        m3u_total_lines=$(wc -l < "$m3u_output_file" 2>/dev/null || echo "0")
+        echo "✓ M3U转换完成: $m3u_output_file"
+        echo "  转换频道数: $converted_lines"
+        echo "  M3U总行数: $m3u_total_lines"
+
+    else
+        echo "⚠ 排序文件不存在，跳过M3U转换: $output_file"
+    fi
+
 else
     echo "⚠ 处理失败: $merged_file"
 fi
@@ -95,3 +144,6 @@ echo "处理结果："
 echo "  原始文件目录: $INPUT_DIR/"
 echo "  排序后文件目录: $OUTPUT_DIR/"
 echo "  合并排序文件: $output_file"
+if [ -f "$m3u_output_file" ]; then
+    echo "  M3U播放列表: $m3u_output_file"
+fi
