@@ -19,8 +19,8 @@ if [ ! -d "$FILTERED_DIR" ]; then
     exit 1
 fi
 
-# 创建目标目录，如果它不存在的话
-mkdir -p "$CHECKED_DIR"
+# 重新创建目标目录
+rm -fr "$CHECKED_DIR" && mkdir -p "$CHECKED_DIR"
 
 # 设置最大并发任务数量
 MAX_JOBS=20
