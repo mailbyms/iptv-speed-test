@@ -4,6 +4,10 @@
 SUBSCRIBE_FILE="subscribe.txt"
 DOWNLOAD_DIR="downloads"
 OUTPUT_DIR="filtered"
+
+# 关键词白名单配置 (用空格分隔多个关键词)
+# 只有包含这些关键词的行才会被保留
+WHITELIST_KEYWORDS="广东 广州 深圳 香港 凤凰 卡通 少儿 /rtp/"
 rm -fr "$DOWNLOAD_DIR" "$OUTPUT_DIR" 
 
 echo "开始处理订阅源下载..."
@@ -153,6 +157,7 @@ done < "$SUBSCRIBE_FILE"
 
 echo "处理完成！"
 echo "开始过滤下载的文件，过滤关键词：swf, drm，audio 只保留 http[s] 协议的..."
+echo "白名单关键词: $WHITELIST_KEYWORDS"
 
 # 处理下载目录中的所有txt文件
 for file in "$DOWNLOAD_DIR"/*.txt; do
@@ -178,6 +183,25 @@ for file in "$DOWNLOAD_DIR"/*.txt; do
 
         # 步骤3: 去掉包含非ASCII字符的URL行
         LC_ALL=C sed -i '/https\?:\/\/.*[\x80-\xFF]/d' "$temp_file"
+
+        # 步骤4: 关键词白名单过滤 - 只保留包含白名单关键词的行
+        if [ -n "$WHITELIST_KEYWORDS" ]; then
+            echo "  应用关键词白名单过滤: $WHITELIST_KEYWORDS"
+
+            # 构建grep模式，匹配任意一个关键词
+            grep_pattern=""
+            for keyword in $WHITELIST_KEYWORDS; do
+                if [ -z "$grep_pattern" ]; then
+                    grep_pattern="$keyword"
+                else
+                    grep_pattern="$grep_pattern|$keyword"
+                fi
+            done
+
+            # 使用grep进行白名单过滤，不区分大小写
+            grep -iE "($grep_pattern)" "$temp_file" > "${temp_file}.whitelist"
+            mv "${temp_file}.whitelist" "$temp_file"
+        fi
 
         # 将过滤后的内容写入输出目录
         if [ -f "$temp_file" ]; then
