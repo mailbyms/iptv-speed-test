@@ -33,9 +33,6 @@ cargo build --release
 # 基本用法
 cargo run -- "http://example.com/stream.m3u8"
 
-# 指定超时时间和并发数
-cargo run -- "http://example.com/stream.m3u8" --timeout 15 --concurrent 3
-
 # 详细输出模式
 cargo run -- "http://example.com/stream.m3u8" --verbose
 
@@ -54,8 +51,6 @@ Arguments:
   <URL>                   要测试的HTTP URL [required]
 
 Options:
-  -t, --timeout <TIMEOUT> 超时时间（秒）[default: 10]
-  -c, --concurrent <COUNT> 并发数量 [default: 5]
   -v, --verbose           详细输出
   -h, --help              Print help
   -V, --version           Print version
@@ -83,12 +78,7 @@ cargo run -- "http://example.com:8800/rtp/239.1.1.1:1234"
 cargo run -- "http://example.com/master.m3u8" --verbose
 ```
 
-#### 5. 高并发测试
-```bash
-cargo run -- "http://example.com/stream.m3u8" --concurrent 10 --timeout 20
-```
-
-#### 6. 详细模式测试
+#### 5. 详细模式测试
 ```bash
 cargo run -- "http://example.com/stream.m3u8" --verbose
 ```

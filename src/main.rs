@@ -1,5 +1,4 @@
 use clap::Parser;
-use std::time::Duration;
 use anyhow::Result;
 
 mod speed_test;
@@ -14,14 +13,6 @@ struct Cli {
     /// 要测试的HTTP URL
     url: String,
 
-    /// 超时时间（秒）
-    #[arg(short = 't', long, default_value = "10")]
-    timeout: u64,
-
-    /// 并发数量
-    #[arg(short = 'c', long, default_value = "5")]
-    concurrent: usize,
-
     /// 详细输出
     #[arg(short = 'v', long)]
     verbose: bool,
@@ -32,8 +23,6 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     let tester = SpeedTester::new(
-        Duration::from_secs(cli.timeout),
-        cli.concurrent,
         cli.verbose,
     );
 

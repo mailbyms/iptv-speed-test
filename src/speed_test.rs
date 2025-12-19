@@ -29,29 +29,21 @@ pub struct SpeedTestResult {
 
 pub struct SpeedTester {
     client: Client,
-    timeout: Duration,
-    #[allow(dead_code)]
-    concurrent: usize,
     verbose: bool,
     m3u8_parser: M3u8Parser,
 }
 
 impl SpeedTester {
-    pub fn new(timeout: Duration, concurrent: usize, verbose: bool) -> Self {
-        // 连接超时设置为1秒
-        let connect_timeout = Duration::from_secs(1);
-
+    pub fn new(verbose: bool) -> Self {
         let client = Client::builder()
-            .timeout(connect_timeout)  // 连接超时1秒
-            .connect_timeout(connect_timeout)  // 连接建立超时1秒
+            .timeout(Duration::from_secs(10))  // 默认整体超时10秒，兜底用
+            .connect_timeout(Duration::from_secs(3))  // 默认连接建立超时3秒
             .danger_accept_invalid_certs(true)
             .build()
             .expect("Failed to create HTTP client");
 
         Self {
             client,
-            timeout,
-            concurrent,
             verbose,
             m3u8_parser: M3u8Parser::new(verbose),
         }
@@ -187,7 +179,8 @@ impl SpeedTester {
             println!("执行直接下载测试...");
         }
 
-        let result = timeout(self.timeout, self.download_and_measure(url)).await;
+        // 这里的 timeout 是兜底用的，download_and_measure 内部会有更细粒度的超时控制
+        let result = timeout(Duration::from_secs(10), self.download_and_measure(url)).await;
 
         let duration = start_time.elapsed();
         let duration_secs = duration.as_secs_f64();
@@ -235,10 +228,9 @@ impl SpeedTester {
     async fn download_and_measure(&self, url: &str) -> Result<(f64, f64, f64)> {
         let start_time = Instant::now();
 
-        // 使用1秒连接超时，但读取流使用3秒限制
         let response = self.client
             .get(url)
-            .timeout(Duration::from_secs(3))  // 整体请求超时3秒（包含连接+读取）
+            .timeout(Duration::from_secs(6))  // 整体请求超时6秒（包含连接+读取）
             .send()
             .await?;
 
@@ -301,7 +293,8 @@ impl SpeedTester {
             println!("执行M3U8/HLS流测试...");
         }
 
-        let result = timeout(self.timeout, self.test_hls_stream(url)).await;
+        // 这里的 timeout 也是兜底用的，最终会调用 download_and_measure 内部会有更细粒度的超时控制
+        let result = timeout(Duration::from_secs(10), self.test_hls_stream(url)).await;
 
         let duration = start_time.elapsed();
         let duration_secs = duration.as_secs_f64();
@@ -409,10 +402,9 @@ impl SpeedTester {
     }
 
     async fn download_segment_speed(&self, url: &str) -> Result<u64> {
-        // 使用1秒连接超时，但读取流使用3秒限制
+        // 使用默认的 client 超时设置
         let response = self.client
             .get(url)
-            .timeout(Duration::from_secs(3))  // 整体请求超时3秒（包含连接+读取）
             .send()
             .await?;
 
